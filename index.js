@@ -3,53 +3,49 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const { body, validationResult } = require("express-validator");
-let bodyParser = require("body-parser");
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
 const mongoose = require("mongoose");
+const Url = require("./models/url.model.js");
 
-// Basic Configuration
-const port = process.env.PORT || 3000;
-
+app.use(express.json()); //Para poder procesar el body de las solicitudes POST
+app.use(express.urlencoded({ extended: true })); //
 app.use(cors());
 
 app.use("/public", express.static(`${process.cwd()}/public`));
-
-app.listen(port, function () {
-  console.log(`Listening on port ${port}`);
-});
 
 app.get("/", function (req, res) {
   res.sendFile(process.cwd() + "/views/index.html");
 });
 
 // Your first API endpoint
-app.get("/api/hello", function (req, res) {
-  res.json({ greeting: "hello API" });
+app.get("/api/hello", async (req, res) => {
+  try {
+    const urls = await Url.find({});
+    res.json(urls);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
-mongoose.connect(process.env.MONGO_URI);
+// Basic Configuration
+const port = process.env.PORT || 3000;
 
-let urlSchema = new mongoose.Schema({
-  originalUrl: {
-    type: String,
-    require: true,
-    unique: true,
-  },
-  shortUrl: {
-    type: Number,
-    require: true,
-    unique: true,
-  },
-});
-
-let Url = mongoose.model("Url", urlSchema);
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("Connected to database!");
+    app.listen(port, function () {
+      console.log(`Listening on port ${port}`);
+    });
+  })
+  .catch(() => {
+    console.log("Connection failed!");
+  });
 
 const createAndSaveUrl = async (originalUrl, shortUrl) => {
   const urlNew = new Url({
     originalUrl,
     shortUrl,
-  });
+  }); //Tambien con la sintaxis .create() es posible (averiguar)
   try {
     const data = await urlNew.save();
     console.log(data, "Se ha guardado exitosamente");
@@ -92,7 +88,7 @@ app.post(
       // Verificar si hay errores de validación
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.json({ error: "invalid url" });
+        return res.json({ error: "invalid url" }); //Deberia ser res.status(400).json({ error: "invalid url" }) ... Pero no se incluye por conflicto con el test de FCC
       }
       const original_url = req.body.url;
 
@@ -114,6 +110,7 @@ app.post(
       }
     } catch (err) {
       console.log("Error al procesar la solicitud.");
+      res.status(500).json({ error: "Error al procesar la solicitud." });
     }
   }
 );
@@ -125,9 +122,9 @@ app.get("/api/shorturl/:url", async (req, res) => {
     if (urlExistsDocument) {
       res.redirect(urlExistsDocument.originalUrl);
     } else {
-      res.status(404).json({ error: "shortUrl does not exist" });
+      res.json({ error: "shortUrl does not exist" }); //Deberia ser: res.status(400).json({ error: "shortUrl does not exist" })... Estatus 400: Bad Request: La solicitud por parte del cliente no es válida o falta algún parámetro.
     }
   } catch (err) {
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ error: "Server error" }); //500 Internal Server Error: Error interno del servidor.
   }
 });
